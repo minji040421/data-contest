@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 학습 플랫폼</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="layout">
+    <!-- 좌측 사이드바 -->
+    <aside class="sidebar">
+      <div class="logo">
+        <span class="logo-mark">AI</span>
+        <span class="logo-text">학습 플랫폼</span>
+      </div>
+      <nav class="tabs">
+        <button class="tab active" data-tab="home">🏠 홈</button>
+        <button class="tab" data-tab="diagnose">🧭 AI 수준 진단</button>
+        <button class="tab" data-tab="recommend">🎯 맞춤 강좌 추천</button>
+        <button class="tab" data-tab="tutor">🤖 AI 튜터</button>
+        <button class="tab" data-tab="status">📊 학습 상태 기록</button>
+      </nav>
+      <button id="reset-btn" class="reset">초기화</button>
+      <p class="footer-note">공공데이터: AI 관련 평생학습 강좌</p>
+    </aside>
+
+    <!-- 메인 영역 -->
+    <main class="main">
+      <!-- 1. 홈 -->
+      <section class="panel active" id="panel-home">
+        <h1>AI 강좌 추천부터 맞춤형 튜터까지 연결하는 학습 코치</h1>
+        <p class="lead">
+          사용자의 AI 수준, 지역, 연령대에 맞는 평생학습 강좌를 추천하고,
+          적합한 강좌가 부족하거나 어렵게 느껴질 때는 AI 튜터가 쉬운 설명과 미션으로 보완 학습을 제공합니다.
+        </p>
+
+        <div class="grid-3">
+          <div class="card">
+            <h3>📚 서비스 소개</h3>
+            <p>AI 강좌 추천과 AI 튜터를 연결한 학습 지원 서비스</p>
+          </div>
+          <div class="card">
+            <h3>✨ 주요 기능</h3>
+            <p>AI 수준 진단, 맞춤 강좌 추천, AI 튜터, 미션, 학습 기록</p>
+          </div>
+          <div class="card">
+            <h3>🔁 이용 흐름</h3>
+            <p>수준 진단 → 강좌 추천 → AI 튜터 학습 → 미션 수행 → 학습 기록 확인</p>
+          </div>
+        </div>
+
+        <div class="cta-row">
+          <button class="btn primary" data-go="diagnose">지금 수준 진단 시작하기 →</button>
+          <span class="muted">총 <b id="total-courses">…</b>개의 AI 평생학습 강좌가 준비되어 있습니다.</span>
+        </div>
+      </section>
+
+      <!-- 2. AI 수준 진단 -->
+      <section class="panel" id="panel-diagnose">
+        <h1>AI 수준 진단</h1>
+        <p class="lead">아래 정보를 입력하시면 초급/중급/고급 수준으로 분석하고, 맞춤 강좌 추천에 활용합니다.</p>
+
+        <form id="diagnose-form" class="form">
+          <div class="form-row">
+            <label>연령대</label>
+            <select name="age" required>
+              <option value="10대">10대</option>
+              <option value="20~30대" selected>20~30대</option>
+              <option value="40~50대">40~50대</option>
+              <option value="60대이상">60대이상</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label>거주 시도</label>
+            <select name="sido" id="sido-select" required></select>
+          </div>
+
+          <div class="form-row">
+            <label>거주 시군구 (선택)</label>
+            <input type="text" name="sigungu" placeholder="예: 수성구, 강남구" />
+          </div>
+
+          <div class="form-row">
+            <label>AI 사용 경험</label>
+            <select name="experience" required>
+              <option value="없음">없음</option>
+              <option value="조금있음" selected>조금있음</option>
+              <option value="자주사용">자주사용</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label>관심 분야</label>
+            <select name="interest" required>
+              <option value="생활정보">생활정보</option>
+              <option value="문서작성">문서작성</option>
+              <option value="콘텐츠제작" selected>콘텐츠제작</option>
+              <option value="업무활용">업무활용</option>
+              <option value="데이터·코딩">데이터·코딩</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label>선호 학습방식</label>
+            <select name="method" required>
+              <option value="오프라인">오프라인</option>
+              <option value="온라인">온라인</option>
+              <option value="혼합">혼합</option>
+              <option value="상관없음" selected>상관없음</option>
+            </select>
+          </div>
+
+          <button type="submit" class="btn primary">진단하기</button>
+        </form>
+
+        <div id="diagnose-result" class="result hidden">
+          <h2>진단 결과</h2>
+          <div class="level-badge">
+            <span class="label">사용자 수준</span>
+            <span class="level" id="result-level">-</span>
+          </div>
+          <p id="result-guide" class="guide"></p>
+          <button class="btn primary" data-go="recommend">맞춤 강좌 추천 받기 →</button>
+        </div>
+      </section>
+
+      <!-- 3. 맞춤 강좌 추천 -->
+      <section class="panel" id="panel-recommend">
+        <h1>맞춤 강좌 추천</h1>
+        <p class="lead">사용자의 수준, 지역, 연령대를 기반으로 추천점수가 높은 순서로 보여드립니다.</p>
+        <div id="recommend-empty" class="empty">
+          먼저 <a href="#" data-go="diagnose">AI 수준 진단</a>을 완료해주세요.
+        </div>
+        <div id="recommend-list" class="course-list"></div>
+      </section>
+
+      <!-- 4. AI 튜터 -->
+      <section class="panel" id="panel-tutor">
+        <h1>AI 튜터</h1>
+        <p class="lead">
+          추천 강좌가 부족하거나 강좌를 듣기 전에 먼저 연습하고 싶을 때 사용하는 탭입니다.
+          사용자 수준에 맞춰 개념을 쉽게 설명하고 오늘의 미션을 제공합니다.
+        </p>
+
+        <div class="tutor-controls">
+          <button id="tutor-load" class="btn primary">오늘의 학습 받기</button>
+          <span id="tutor-source" class="muted"></span>
+        </div>
+
+        <div id="tutor-content" class="tutor-content hidden">
+          <div class="card">
+            <h3>📖 오늘의 개념</h3>
+            <p id="tutor-explanation"></p>
+          </div>
+
+          <div class="card">
+            <h3>👣 따라하기</h3>
+            <ol id="tutor-steps"></ol>
+          </div>
+
+          <div class="card">
+            <h3>💡 예시 질문</h3>
+            <p id="tutor-example" class="example-quote"></p>
+          </div>
+
+          <div class="card mission">
+            <h3>🎯 오늘의 미션 — <span id="mission-title"></span></h3>
+            <p id="mission-content"></p>
+            <p class="success-criteria">✅ 성공 기준: <span id="mission-success"></span></p>
+            <div class="mission-buttons">
+              <button id="btn-complete" class="btn primary">미션 완료</button>
+              <button id="btn-hard" class="btn warn">너무 어려워요</button>
+              <button id="btn-next" class="btn">다음 미션 받기</button>
+            </div>
+            <p id="mission-feedback" class="feedback hidden"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. 학습 상태 기록 -->
+      <section class="panel" id="panel-status">
+        <h1>학습 상태 기록</h1>
+        <p class="lead">진단 결과와 미션 진행 상황을 한눈에 확인할 수 있습니다.</p>
+
+        <div class="status-grid">
+          <div class="card">
+            <h3>📊 현재 수준</h3>
+            <p id="status-level" class="big">-</p>
+          </div>
+          <div class="card">
+            <h3>✅ 완료한 미션 수</h3>
+            <p id="status-done-count" class="big">0개</p>
+          </div>
+          <div class="card">
+            <h3>🟧 어려워한 미션 수</h3>
+            <p id="status-hard-count" class="big">0개</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>📚 추천받은 강좌</h3>
+          <ul id="status-recommended"></ul>
+        </div>
+
+        <div class="card">
+          <h3>🎯 완료한 미션</h3>
+          <ul id="status-done"></ul>
+        </div>
+
+        <div class="card">
+          <h3>⚠️ 어려워한 미션</h3>
+          <ul id="status-hard"></ul>
+        </div>
+
+        <div class="card highlight">
+          <h3>➡️ 다음 추천 학습 방향</h3>
+          <p id="status-next">-</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

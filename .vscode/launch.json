@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flask: AI 학습 플랫폼",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/app.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "FLASK_DEBUG": "1",
+        "OLLAMA_URL": "http://localhost:11434/api/generate",
+        "OLLAMA_MODEL": "qwen2.5:latest",
+        "PORT": "5001"
+      }
+    }
+  ]
+}

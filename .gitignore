@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
+.pytest_cache/
+
+# Flask
+instance/
+.webassets-cache
+*.log
+
+# VS Code (launch.json은 공유, 개인 설정은 제외)
+.vscode/settings.json
+.vscode/*.local.json
+
+# Claude Code 세션 설정
+.claude/settings.local.json
+.claude/*.local.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# 환경변수 (Ollama URL/모델 등 개인 설정)
+.env
+.env.local
+
+# 임시 / 빌드
+*.tmp
+*.bak
+dist/
+build/
+*.egg-info/
