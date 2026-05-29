@@ -6,6 +6,7 @@ AI 학습 플랫폼 - Flask 백엔드
 import csv
 import json
 import os
+import random
 import re
 from pathlib import Path
 
@@ -193,13 +194,13 @@ def recommend(user: dict, top_n: int = 10) -> list[dict]:
 
 
 # ---------------- AI 튜터 (Ollama) ----------------
-def call_ollama(prompt: str) -> str:
+def call_ollama(prompt: str, options: dict | None = None) -> str:
     try:
-        resp = requests.post(
-            OLLAMA_URL,
-            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
-            timeout=60,
-        )
+        body = {"model": OLLAMA_MODEL, "prompt": prompt, "stream": False}
+        if options:
+            # 답변 다양성을 위한 옵션(temperature/seed 등)
+            body["options"] = options
+        resp = requests.post(OLLAMA_URL, json=body, timeout=60)
         if resp.ok:
             return resp.json().get("response", "").strip()
         return f"[Ollama 오류 {resp.status_code}] {resp.text[:200]}"
@@ -207,13 +208,66 @@ def call_ollama(prompt: str) -> str:
         return f"[Ollama 연결 실패] {e}\n→ Ollama가 실행 중인지 확인하세요: `ollama serve`"
 
 
-def build_tutor_prompt(level: str, interest: str, course_title: str = "") -> str:
+# 관심 분야별 구체적인 미션 주제 풀 (매번 랜덤으로 하나 골라 다양성 확보)
+INTEREST_TOPICS = {
+    "생활정보": [
+        "요리 레시피 추천받기", "여행 일정 짜기", "건강한 식단 만들기",
+        "장보기 목록 정리", "집 정리·청소 팁", "한 달 예산 계획",
+        "운동 루틴 추천", "취미 추천받기", "선물 아이디어 얻기",
+    ],
+    "문서작성": [
+        "정중한 이메일 쓰기", "자기소개서 초안 만들기", "회의록 요약하기",
+        "보고서 개요 잡기", "공지문 작성", "감사 인사말 쓰기",
+        "사과 메시지 다듬기", "이력서 문장 고치기",
+    ],
+    "콘텐츠제작": [
+        "유튜브 영상 제목 짓기", "인스타그램 캡션 쓰기", "블로그 글 아이디어 얻기",
+        "썸네일 문구 만들기", "짧은 이야기 쓰기", "홍보 포스터 문구",
+        "행사 초대글 작성", "제품 소개 문구 만들기",
+    ],
+    "업무활용": [
+        "엑셀 함수 물어보기", "회의 안건 정리", "업무 우선순위 정하기",
+        "고객 응대 메시지 작성", "프레젠테이션 구성 잡기", "일정 관리 팁 얻기",
+        "업무 메일 답장 쓰기", "아이디어 브레인스토밍",
+    ],
+    "데이터·코딩": [
+        "파이썬 기초 개념 질문", "데이터 표 정리 요청", "간단한 그래프 설명 듣기",
+        "코드 오류 원인 물어보기", "엑셀 데이터 분석 방법", "알고리즘 쉽게 이해하기",
+        "정규표현식 만들기", "SQL 기초 질문",
+    ],
+}
+
+
+def pick_topic(interest: str, avoid: list[str] | None = None) -> str:
+    """관심 분야에 맞는 주제를 랜덤으로 하나 고른다(최근 사용한 건 가능하면 회피)."""
+    pool = INTEREST_TOPICS.get(interest) or INTEREST_TOPICS["생활정보"]
+    avoid = avoid or []
+    candidates = [t for t in pool if t not in avoid] or pool
+    return random.choice(candidates)
+
+
+def build_tutor_prompt(
+    level: str, interest: str, topic: str,
+    avoid_titles: list[str] | None = None, course_title: str = "",
+) -> str:
     course_part = (
         f"\n사용자가 선택한 강좌: {course_title}" if course_title else ""
     )
+    avoid_part = ""
+    if avoid_titles:
+        avoid_part = (
+            "\n\n[중요] 아래 미션들과는 주제가 절대 겹치지 않게, "
+            "완전히 다른 내용으로 만들어주세요:\n- " + "\n- ".join(avoid_titles)
+        )
     return f"""당신은 AI를 처음 배우는 한국 사용자를 도와주는 친절한 'AI 튜터'입니다.
 사용자 수준: {level}
-관심 분야: {interest}{course_part}
+관심 분야: {interest}
+이번 미션 주제: "{topic}" — 반드시 이 주제를 활용해 구체적인 실습 미션을 만들어주세요.{course_part}{avoid_part}
+
+[작성 규칙]
+- 예시 질문과 미션은 위의 "이번 미션 주제"에 맞춰 구체적으로 작성하세요.
+- '날씨', '오늘 날씨', '날씨에 맞는 옷차림' 같은 뻔한 예시는 절대 사용하지 마세요.
+- 매번 다른 분야·상황의 예시를 들어 신선하게 만들어주세요.
 
 아래 JSON 형식으로만 응답하세요. 코드블록 없이 순수 JSON만 출력하세요.
 
@@ -231,52 +285,74 @@ def build_tutor_prompt(level: str, interest: str, course_title: str = "") -> str
 반드시 한국어로, 사용자 수준({level})에 맞춰 작성하세요."""
 
 
-def fallback_tutor(level: str, interest: str) -> dict:
+def fallback_tutor(level: str, interest: str, avoid_titles: list[str] | None = None) -> dict:
+    """Ollama 미연결 시 사용하는 기본 미션. 수준별로 여러 개를 두고 랜덤 선택해 다양성 확보."""
+    avoid_titles = avoid_titles or []
     templates = {
-        "초급": {
-            "easy_explanation": "AI(생성형 AI)는 우리가 글이나 그림으로 부탁하면 답을 만들어주는 도구입니다. ChatGPT는 그 중에서 글로 대화하는 AI예요. 어렵게 생각하지 말고, 친구에게 부탁하듯이 말해보세요.",
-            "steps": [
-                "ChatGPT 또는 비슷한 AI 서비스에 접속한다",
-                "검색창에 궁금한 것을 한 문장으로 적어본다",
-                "AI의 답이 어려우면 '쉽게 설명해줘'라고 다시 요청한다",
-            ],
-            "example_question": "내일 날씨에 맞는 옷차림 알려줘",
-            "mission": {
-                "title": "AI에게 생활 정보 물어보기",
-                "content": "AI에게 '내일 날씨에 맞는 옷차림 알려줘'라고 입력해본다.",
-                "success": "AI가 날씨에 맞는 옷차림을 추천해주면 완료",
+        "초급": [
+            {
+                "easy_explanation": "AI(생성형 AI)는 우리가 글로 부탁하면 답을 만들어주는 도구입니다. ChatGPT는 글로 대화하는 AI예요. 어렵게 생각하지 말고 친구에게 부탁하듯 말해보세요.",
+                "steps": ["AI 서비스에 접속한다", "원하는 요리 한 가지를 정한다", "'○○ 만드는 법 알려줘'라고 입력한다"],
+                "example_question": "김치볶음밥 쉽게 만드는 법 알려줘",
+                "mission": {"title": "AI에게 요리법 물어보기", "content": "AI에게 먹고 싶은 음식의 레시피를 물어본다.", "success": "AI가 재료와 순서를 알려주면 완료"},
             },
-        },
-        "중급": {
-            "easy_explanation": "AI에게 단순한 질문 대신 '말투'와 '형식'을 함께 알려주면 결과가 훨씬 좋아집니다. 예를 들어 '친근한 말투로 3개 만들어줘'처럼 조건을 붙여 요청하세요.",
-            "steps": [
-                "AI에게 만들고 싶은 결과물을 정한다 (예: 홍보 문구)",
-                "말투와 개수, 길이 같은 조건을 함께 적는다",
-                "마음에 드는 결과를 골라 직접 다듬어 본다",
-            ],
-            "example_question": "동아리 홍보 문구를 친근한 말투로 3개 만들어줘",
-            "mission": {
-                "title": "AI에게 글쓰기 도움 받기",
-                "content": "AI에게 동아리 홍보 문구를 친근한 말투로 3개 요청하고, 그 중 하나를 골라 직접 수정해본다.",
-                "success": "마음에 드는 문장을 골라 수정하면 완료",
+            {
+                "easy_explanation": "AI는 정보를 정리해주는 데도 유용합니다. 궁금한 걸 한 문장으로 물어보면 알기 쉽게 답해줍니다.",
+                "steps": ["가고 싶은 여행지를 떠올린다", "AI에게 '○○ 2박3일 일정 짜줘'라고 입력한다", "마음에 드는 부분을 골라본다"],
+                "example_question": "부산 2박3일 여행 일정 짜줘",
+                "mission": {"title": "AI와 여행 계획 세우기", "content": "AI에게 가고 싶은 곳의 여행 일정을 만들어 달라고 해본다.", "success": "AI가 날짜별 일정을 제안하면 완료"},
             },
-        },
-        "고급": {
-            "easy_explanation": "프롬프트에 '대상, 말투, 형식' 세 가지 조건을 명확히 넣으면 결과 품질이 크게 올라갑니다. 한 번에 좋은 답이 안 나오면 조건을 바꿔가며 반복(이터레이션)하세요.",
-            "steps": [
-                "프롬프트에 대상(누구를 위한지), 말투, 형식(표/리스트 등)을 명시한다",
-                "AI 결과를 보고 부족한 점을 다시 프롬프트에 반영한다",
-                "최종 결과물을 실제 사용 맥락에 맞게 다듬는다",
-            ],
-            "example_question": "대상은 60대 초보자, 말투는 쉬운 설명, 형식은 표로 해서 AI 사용법 교육안을 만들어줘",
-            "mission": {
-                "title": "조건을 넣어 결과 개선하기",
-                "content": "대상·말투·형식 조건을 넣어 AI에게 교육안을 요청하고, 결과를 평가해 한 번 더 개선한다.",
-                "success": "조건이 반영된 결과가 나오고 1회 이상 개선되면 완료",
+            {
+                "easy_explanation": "AI에게는 일상적인 고민도 물어볼 수 있어요. 추천을 받고 싶을 때 조건을 함께 알려주면 더 좋습니다.",
+                "steps": ["요즘 관심 있는 분야를 정한다", "AI에게 '초보자가 시작하기 좋은 취미 추천해줘'라고 입력한다", "추천 중 하나를 골라본다"],
+                "example_question": "집에서 혼자 할 수 있는 취미 추천해줘",
+                "mission": {"title": "AI에게 취미 추천받기", "content": "AI에게 나에게 맞는 취미를 추천해 달라고 해본다.", "success": "AI가 취미 몇 가지를 추천해주면 완료"},
             },
-        },
+        ],
+        "중급": [
+            {
+                "easy_explanation": "AI에게 단순 질문 대신 '말투'와 '형식'을 함께 주면 결과가 훨씬 좋아집니다. 예: '친근한 말투로 3개 만들어줘'.",
+                "steps": ["만들 결과물을 정한다(예: 홍보 문구)", "말투·개수·길이 조건을 함께 적는다", "마음에 드는 결과를 골라 다듬는다"],
+                "example_question": "동아리 홍보 문구를 친근한 말투로 3개 만들어줘",
+                "mission": {"title": "조건을 넣어 홍보 문구 만들기", "content": "AI에게 말투와 개수를 정해 홍보 문구를 요청하고 하나를 골라 수정한다.", "success": "마음에 드는 문장을 골라 수정하면 완료"},
+            },
+            {
+                "easy_explanation": "AI는 긴 글을 짧게 요약하는 데 강합니다. 원하는 길이를 함께 알려주면 더 깔끔하게 정리해줍니다.",
+                "steps": ["요약할 글이나 회의 내용을 준비한다", "AI에게 '3줄로 요약해줘'라고 요청한다", "핵심이 빠지지 않았는지 확인한다"],
+                "example_question": "이 회의 내용을 핵심만 3줄로 요약해줘",
+                "mission": {"title": "AI로 내용 요약하기", "content": "긴 글이나 메모를 AI에게 3줄로 요약해 달라고 해본다.", "success": "핵심이 담긴 요약이 나오면 완료"},
+            },
+            {
+                "easy_explanation": "AI에게 역할을 부여하면 답의 톤이 달라집니다. '너는 마케터야'처럼 역할을 주고 물어보세요.",
+                "steps": ["AI에게 역할을 부여한다(예: 너는 카피라이터야)", "원하는 결과를 구체적으로 요청한다", "결과를 비교해본다"],
+                "example_question": "너는 카피라이터야. 카페 신메뉴 광고 문구 3개 만들어줘",
+                "mission": {"title": "AI에게 역할 부여하기", "content": "AI에게 특정 역할을 준 뒤 그 역할에 맞는 결과물을 요청한다.", "success": "역할에 맞는 답이 나오면 완료"},
+            },
+        ],
+        "고급": [
+            {
+                "easy_explanation": "프롬프트에 '대상·말투·형식' 세 조건을 명확히 넣으면 품질이 크게 오릅니다. 한 번에 안 되면 조건을 바꿔 반복하세요.",
+                "steps": ["대상·말투·형식을 명시한다", "결과의 부족한 점을 다시 프롬프트에 반영한다", "실제 맥락에 맞게 다듬는다"],
+                "example_question": "대상은 신입사원, 말투는 친근하게, 형식은 표로 업무 매뉴얼을 만들어줘",
+                "mission": {"title": "조건을 넣어 결과 개선하기", "content": "대상·말투·형식 조건을 넣어 결과를 받고 한 번 더 개선한다.", "success": "조건이 반영되고 1회 이상 개선되면 완료"},
+            },
+            {
+                "easy_explanation": "AI에게 표나 코드 같은 구조화된 출력도 요청할 수 있습니다. 형식을 정확히 지정하는 게 핵심입니다.",
+                "steps": ["원하는 출력 형식을 정한다(표/리스트/코드)", "필요한 항목(열 제목 등)을 명시한다", "결과를 복사해 바로 활용한다"],
+                "example_question": "월별 지출을 항목·금액·비고 3개 열의 표로 정리해줘",
+                "mission": {"title": "AI로 데이터를 표로 정리하기", "content": "흩어진 정보를 AI에게 표 형식으로 정리해 달라고 요청한다.", "success": "원하는 열 구성의 표가 나오면 완료"},
+            },
+            {
+                "easy_explanation": "여러 안을 비교하게 하면 더 나은 결정을 내릴 수 있습니다. '장단점을 비교해줘'라고 요청해보세요.",
+                "steps": ["비교하고 싶은 선택지를 정한다", "AI에게 장단점을 표로 비교해 달라고 한다", "결과를 근거로 결정한다"],
+                "example_question": "노션과 엑셀로 일정 관리하는 방법의 장단점을 비교해줘",
+                "mission": {"title": "AI로 선택지 비교하기", "content": "두 가지 이상의 선택지를 AI에게 비교 분석해 달라고 요청한다.", "success": "장단점이 정리된 비교가 나오면 완료"},
+            },
+        ],
     }
-    return templates.get(level, templates["초급"])
+    pool = templates.get(level, templates["초급"])
+    candidates = [t for t in pool if t["mission"]["title"] not in avoid_titles] or pool
+    return dict(random.choice(candidates))
 
 
 # ---------------- 라우트 ----------------
@@ -299,6 +375,7 @@ def api_diagnose():
     session["mission_done"] = session.get("mission_done", [])
     session["mission_hard"] = session.get("mission_hard", [])
     session["recommended"] = []
+    session["recent_missions"] = []
     return jsonify(user)
 
 
@@ -323,8 +400,14 @@ def api_tutor():
     interest = payload.get("interest") or user.get("interest", "생활정보")
     course_title = payload.get("course_title", "")
 
-    prompt = build_tutor_prompt(level, interest, course_title)
-    raw = call_ollama(prompt)
+    # 최근에 받은 미션 제목들(중복 방지용) + 이번 주제 랜덤 선택
+    recent = session.get("recent_missions", [])
+    topic = pick_topic(interest, avoid=recent)
+
+    prompt = build_tutor_prompt(level, interest, topic, avoid_titles=recent, course_title=course_title)
+    # 매번 다른 결과가 나오도록 다양성 옵션 부여(높은 temperature + 랜덤 seed)
+    options = {"temperature": 0.9, "top_p": 0.95, "seed": random.randint(1, 1_000_000)}
+    raw = call_ollama(prompt, options=options)
 
     parsed = None
     # JSON 추출 시도
@@ -337,11 +420,19 @@ def api_tutor():
 
     if not parsed or "easy_explanation" not in parsed:
         # Ollama 실패 시 fallback 사용 + 원본 메시지 같이 전달
-        parsed = fallback_tutor(level, interest)
+        parsed = fallback_tutor(level, interest, avoid_titles=recent)
         parsed["_source"] = "fallback"
         parsed["_raw"] = raw
     else:
         parsed["_source"] = "ollama"
+
+    parsed["_topic"] = topic
+
+    # 이번 미션 제목을 최근 목록에 기록(최대 5개 유지)
+    title = (parsed.get("mission") or {}).get("title")
+    if title:
+        recent = [title] + [t for t in recent if t != title]
+        session["recent_missions"] = recent[:5]
 
     return jsonify(parsed)
 
