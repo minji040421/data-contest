@@ -238,3 +238,29 @@ ul li { padding: 3px 0; }
   .grid-3, .form, .status-grid { grid-template-columns: 1fr; }
   .course-card { grid-template-columns: 1fr; }
 }
+
+/* ---- 홈페이지 바로가기 버튼 ---- */
+.homepage-btn {
+    display: inline-block;
+    margin-top: 14px;
+    padding: 9px 16px;
+    background: linear-gradient(135deg, #4a6cf7, #6a3df7);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.homepage-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(74,108,247,0.35);
+}
+.homepage-btn.search {
+    background: #eef1f8;
+    color: #4a6cf7;
+    border: 1px solid #c9d3f5;
+}
+.homepage-btn.search:hover {
+    box-shadow: 0 6px 14px rgba(0,0,0,0.10);
+}

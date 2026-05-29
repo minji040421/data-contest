@@ -63,6 +63,17 @@ async function loadRecommend() {
     const reasons = c.추천이유.length
       ? `<div class="reasons"><b>추천 이유:</b><ul>${c.추천이유.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul></div>`
       : "";
+
+    // 홈페이지 주소가 있으면 바로가기 버튼, 없으면 네이버 검색 버튼
+    const homepage = (c.홈페이지주소 || "").trim();
+    let linkBtn;
+    if (homepage) {
+      linkBtn = `<a class="homepage-btn" href="${encodeURI(homepage)}" target="_blank" rel="noopener">🔗 강좌 홈페이지 바로가기</a>`;
+    } else {
+      const query = encodeURIComponent(`${c.운영기관명} ${c.강좌명}`);
+      linkBtn = `<a class="homepage-btn search" href="https://search.naver.com/search.naver?query=${query}" target="_blank" rel="noopener">🔍 검색으로 찾기</a>`;
+    }
+
     const card = document.createElement("div");
     card.className = "course-card";
     card.innerHTML = `
@@ -79,6 +90,7 @@ async function loadRecommend() {
           <span class="tag">${escapeHtml(c.교육방법구분)}</span>
         </div>
         ${reasons}
+        ${linkBtn}
       </div>
       <div class="score-box">
         <div class="num">${c.추천점수}</div>
